@@ -55,12 +55,17 @@ def get_lora_config(cfg: AppConfig) -> LoraConfig:
         "CAUSAL_LM": TaskType.CAUSAL_LM,
         "SEQ_2_SEQ_LM": TaskType.SEQ_2_SEQ_LM,
     }
+    # Avoid applying PEFT to the Vision Encoder (which already has its own LoRA inside the model).
+    # This prevents the 'only Tensors of floating point dtype can require gradients' crash.
+    targets = "|".join(cfg.lora.target_modules)
+    target_regex = fr".*model\.layers.*(?:{targets})"
+
     return LoraConfig(
         r=cfg.lora.r,
         lora_alpha=cfg.lora.alpha,
         lora_dropout=cfg.lora.dropout,
         bias=cfg.lora.bias,
-        target_modules=cfg.lora.target_modules,
+        target_modules=target_regex,
         task_type=task_type_map.get(cfg.lora.task_type, TaskType.CAUSAL_LM),
         # Save embedding layers when fine-tuning with new special tokens
         modules_to_save=["lm_head", "embed_tokens"],

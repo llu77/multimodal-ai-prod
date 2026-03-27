@@ -35,18 +35,6 @@ async def lifespan(app: FastAPI):
 
     cfg = load_config("config/config.yaml")
 
-    # Update CORS origins from config (after config is loaded)
-    cors_origins = cfg.server.cors_origins if cfg.server.cors_origins != ["*"] else [
-        "http://localhost:3000", "http://localhost:8000"
-    ]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST"],
-        allow_headers=["*"],
-    )
-
     engine = MultimodalInferenceEngine(cfg)
     rag = engine.rag
 
@@ -63,6 +51,20 @@ app = FastAPI(
     description="نظام ذكاء اصطناعي متعدد الوسائط مع RAG — Production API",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+# ─── CORS Middleware ───
+# Load config early to get CORS settings
+_tmp_cfg = load_config("config/config.yaml")
+cors_origins = _tmp_cfg.server.cors_origins if _tmp_cfg.server.cors_origins != ["*"] else [
+    "http://localhost:3000", "http://localhost:8000"
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
 
