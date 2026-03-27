@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multimodal-ai-prod"
+version = "1.0.0"
+description = "Production Multimodal AI System with RAG — نظام ذكاء اصطناعي متعدد الوسائط"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+[project.scripts]
+symbol-ai = "src.api.server:start_server"
+symbol-train = "src.training.train:main"
+symbol-eval = "src.evaluation.evaluator:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "gpu: marks tests that require GPU",
+    "network: marks tests that require internet (deselect with '-m \"not network\"')",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # Line too long — handled by formatter

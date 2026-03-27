@@ -1,0 +1,167 @@
+# ============================================
+# Multimodal AI Production - Configuration
+# نظام ذكاء اصطناعي متعدد الوسائط - الإعدادات
+# ============================================
+
+# --- Model Configuration ---
+model:
+  # Base model to fine-tune
+  base_model: "microsoft/Phi-4-multimodal-instruct"
+  # Alternative models (uncomment to switch):
+  # base_model: "Qwen/Qwen2.5-VL-7B-Instruct"
+  # base_model: "google/gemma-3-27b-it"
+
+  # Quantization for memory efficiency
+  quantization:
+    enabled: true
+    bits: 4                    # 4-bit quantization (QLoRA)
+    quant_type: "nf4"          # nf4 or fp4
+    compute_dtype: "bfloat16"  # bfloat16 or float16
+    double_quant: true         # Double quantization for extra savings
+
+  # Model paths
+  output_dir: "./models/fine-tuned"
+  adapter_dir: "./models/adapters"
+  merged_dir: "./models/merged"
+
+  # Context window
+  max_length: 4096
+  max_new_tokens: 2048
+
+# --- Audio Model (Whisper) ---
+audio:
+  model: "openai/whisper-large-v3"
+  # Smaller alternatives: "openai/whisper-medium", "openai/whisper-small"
+  language: "ar"               # Arabic by default
+  device: "cuda"
+  compute_type: "float16"
+
+# --- LoRA Configuration ---
+lora:
+  r: 32                        # LoRA rank (16, 32, or 64)
+  alpha: 64                    # LoRA alpha (usually 2x rank)
+  dropout: 0.05                # Dropout rate
+  bias: "none"                 # Bias training: none, all, lora_only
+  target_modules:              # Modules to apply LoRA to
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  task_type: "CAUSAL_LM"
+
+# --- Training Configuration ---
+training:
+  # Basic training params
+  epochs: 3
+  batch_size: 2                 # Per-device batch size
+  gradient_accumulation_steps: 8 # Effective batch = batch_size * grad_accum
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler: "cosine"
+
+  # Memory optimization
+  fp16: false
+  bf16: true                   # Use bfloat16 (better for training)
+  gradient_checkpointing: true  # Save VRAM at cost of speed
+  max_grad_norm: 1.0
+
+  # Logging
+  logging_steps: 10
+  save_steps: 100
+  eval_steps: 50
+  save_total_limit: 3
+
+  # Data
+  dataset_path: "./data/processed"
+  train_split: 0.9
+  seed: 42
+
+# --- GRPO / RLVR Configuration ---
+# Updated with Nemotron/DAPO 2025 best practices
+grpo:
+  enabled: false               # Enable after initial fine-tuning
+  num_generations: 8           # Generations per prompt (4-16)
+  max_completion_length: 1024
+  max_prompt_length: 512
+  learning_rate: 1.0e-5
+  temperature: 0.7             # Generation sampling temperature
+  warmup_ratio: 0.1            # LR warmup (stabilizes early training)
+
+  # KL / Policy constraints
+  beta: 0.0                    # KL divergence coeff (0.0 = modern standard, no KL)
+  epsilon: 0.2                 # PPO-style clip range
+
+  # Loss type: 'grpo' (vanilla), 'dapo' (recommended), 'dr_grpo', 'bnpo'
+  # DAPO = Dynamic Advantage Policy Optimization — fixes GRPO instability
+  loss_type: "dapo"
+
+  # Reward scaling: false (raw), true (group std), "batch" (batch std — recommended)
+  # "batch" = mean at group level, std at batch level (more robust)
+  scale_rewards: "batch"
+
+  # Mask completions that hit max_length (truncated = unreliable reward signal)
+  mask_truncated_completions: true
+
+  # Reasoning format: XML structured output
+  # Forces model to use <reasoning>...</reasoning><answer>...</answer> format
+  reasoning_format: "xml"      # "xml", "think", or "none"
+
+  reward_functions:
+    - "accuracy"               # Correctness vs ground-truth
+    - "format"                 # Structural compliance
+    - "coherence"              # Language consistency
+
+# --- RAG Configuration ---
+rag:
+  # Embedding model
+  embedding_model: "intfloat/multilingual-e5-large-instruct"
+  embedding_dim: 1024
+  chunk_size: 512
+  chunk_overlap: 50
+
+  # Vector store backend: "chromadb" (local, default), "supabase" (production)
+  vector_store: "chromadb"
+
+  # Supabase configuration
+  supabase:
+    url: "${SUPABASE_URL}"
+    key: "${SUPABASE_KEY}"
+    table_name: "documents"
+    embedding_column: "embedding"
+    content_column: "content"
+    metadata_column: "metadata"
+
+  # ChromaDB fallback (local, no external DB needed)
+  chromadb:
+    persist_dir: "./data/embeddings/chromadb"
+    collection_name: "knowledge_base"
+
+  # Retrieval settings
+  retrieval:
+    top_k: 5                   # Number of documents to retrieve
+    similarity_threshold: 0.7   # Minimum similarity score
+    rerank: true                # Re-rank retrieved documents
+    rerank_model: "BAAI/bge-reranker-v2-m3"
+
+# --- API Server Configuration ---
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1                   # Workers (1 for GPU)
+  cors_origins: ["http://localhost:3000", "http://localhost:8000"]
+  api_key: "${API_KEY}"         # Set via environment variable
+  rate_limit: 60               # Requests per minute
+  max_upload_size: 52428800    # 50MB
+
+# --- Logging ---
+logging:
+  level: "INFO"
+  file: "./logs/app.log"
+  wandb:
+    enabled: false
+    project: "multimodal-ai"
+    entity: ""
