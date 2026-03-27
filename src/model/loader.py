@@ -36,6 +36,7 @@ def get_quantization_config(cfg: AppConfig) -> Optional[BitsAndBytesConfig]:
             bnb_4bit_quant_type=cfg.model.quant_type,
             bnb_4bit_compute_dtype=compute_dtype,
             bnb_4bit_use_double_quant=cfg.model.double_quant,
+            llm_int8_enable_fp32_cpu_offload=True,  # CRITICAL: Allows offloading to RAM when VRAM is full
         )
     elif cfg.model.quantization_bits == 8:
         return BitsAndBytesConfig(load_in_8bit=True)
@@ -85,6 +86,9 @@ def load_base_model(
     quant_config = get_quantization_config(cfg)
     compute_dtype = getattr(torch, cfg.model.compute_dtype, torch.bfloat16)
 
+    from transformers import AutoConfig
+    config = AutoConfig.from_pretrained(cfg.model.base_model, trust_remote_code=True)
+
     model_kwargs = {
         "trust_remote_code": True,
         "device_map": "auto",
@@ -95,19 +99,35 @@ def load_base_model(
     try:
         import flash_attn  # noqa: F401
         model_kwargs["attn_implementation"] = "flash_attention_2"
+        config._attn_implementation = "flash_attention_2"
         logger.info("Flash Attention 2 enabled")
     except ImportError:
+        model_kwargs["attn_implementation"] = "eager"
+        config._attn_implementation = "eager"
+        if hasattr(config, "attn_implementation"):
+            config.attn_implementation = "eager"
         logger.info("Flash Attention 2 not available — using default attention")
 
     if quant_config:
         model_kwargs["quantization_config"] = quant_config
         logger.info(f"Quantization enabled: {cfg.model.quantization_bits}-bit {cfg.model.quant_type}")
 
+    # Fix Microsoft Phi-4 PEFT initialization bug: Phi4MMModel lacks prepare_inputs_for_generation
+    # which causes PeftModel to crash when the model internally instantiates LoRA for its vision encoder.
+    added_dummy_prep = False
+    if not hasattr(torch.nn.Module, "prepare_inputs_for_generation"):
+        setattr(torch.nn.Module, "prepare_inputs_for_generation", lambda self, *args, **kwargs: None)
+        added_dummy_prep = True
+
     # Load model
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model.base_model,
+        config=config,
         **model_kwargs,
     )
+
+    if added_dummy_prep:
+        delattr(torch.nn.Module, "prepare_inputs_for_generation")
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(

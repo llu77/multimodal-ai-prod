@@ -13,10 +13,10 @@ model:
 
   # Quantization for memory efficiency
   quantization:
-    enabled: false             # Disabled for native Windows compatibility
+    enabled: true              # ENABLED: to prevent Out of Memory / Disk Offload crashes
     bits: 4                    # 4-bit quantization (QLoRA)
     quant_type: "nf4"          # nf4 or fp4
-    compute_dtype: "bfloat16"  # bfloat16 or float16
+    compute_dtype: "float16"   # Changed to float16 because bf16 is not supported
     double_quant: true         # Double quantization for extra savings
 
   # Model paths
@@ -64,8 +64,8 @@ training:
   lr_scheduler: "cosine"
 
   # Memory optimization
-  fp16: false
-  bf16: true                   # Use bfloat16 (better for training)
+  fp16: true                   # Fallback to fp16 for older GPUs or Windows
+  bf16: false                  # Disabled because setup doesn't support bf16
   gradient_checkpointing: true  # Save VRAM at cost of speed
   max_grad_norm: 1.0
 

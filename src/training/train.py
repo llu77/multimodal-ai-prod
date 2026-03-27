@@ -134,7 +134,7 @@ def run_sft_training(cfg: AppConfig) -> str:
         gradient_checkpointing=cfg.training.gradient_checkpointing,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         report_to="none",
-        optim="paged_adamw_8bit",
+        optim="adamw_torch",          # Safe optimizer for Windows (no bitsandbytes required)
         remove_unused_columns=False,  # CRITICAL: keep pixel_values and other image columns
         dataloader_pin_memory=True,
     )
